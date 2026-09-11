@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
+  <meta name="theme-color" content="#12141a" />
+  <title>Entrenamiento</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="app"></div>
+
+  <nav class="bottomnav" id="bottomnav">
+    <button data-nav="hoy" class="navbtn active">
+      <span class="navicon">🏋️</span><span>Hoy</span>
+    </button>
+    <button data-nav="medidas" class="navbtn">
+      <span class="navicon">📏</span><span>Medidas</span>
+    </button>
+    <button data-nav="plan" class="navbtn">
+      <span class="navicon">📋</span><span>Plan</span>
+    </button>
+  </nav>
+
+  <script type="module" src="js/app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js').catch(() => {});
+      });
+    }
+  </script>
+</body>
+</html>
