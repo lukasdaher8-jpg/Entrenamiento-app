@@ -1,25 +1,49 @@
-// Capa de datos. Hoy guarda en localStorage; cuando se conecte Firebase,
-// esta es la única capa que cambia (misma interfaz: get/set/subscribe por colección).
+// Capa de datos. localStorage = caché instantánea (la UI siempre lee/escribe ahí primero,
+// así que funciona sin señal); Firestore = fuente compartida entre dispositivos, sincronizada
+// en segundo plano. Todo lo demás en la app solo usa las funciones de este archivo.
+
+import { db, STATE_DOC, setDoc, onSnapshot } from './firebase.js';
 
 const STORAGE_KEY = 'entrenamiento_v1';
+const EMPTY_STATE = { setLogs: {}, dayLogs: {}, measurements: {}, substitutions: {} };
 
 function load() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     const data = raw ? JSON.parse(raw) : {};
-    return { setLogs: {}, dayLogs: {}, measurements: {}, substitutions: {}, ...data };
+    return { ...EMPTY_STATE, ...data };
   } catch {
-    return { setLogs: {}, dayLogs: {}, measurements: {}, substitutions: {} };
+    return { ...EMPTY_STATE };
   }
 }
 
 let state = load();
 const listeners = new Set();
+let cloudSyncTimer = null;
+let applyingRemote = false;
 
 function persist() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   listeners.forEach((fn) => fn());
+  if (!applyingRemote) scheduleCloudSync();
 }
+
+function scheduleCloudSync() {
+  clearTimeout(cloudSyncTimer);
+  cloudSyncTimer = setTimeout(() => {
+    setDoc(STATE_DOC, state).catch((err) => console.warn('No se pudo sincronizar con Firestore:', err.message));
+  }, 500);
+}
+
+// Cualquier cambio guardado desde otro dispositivo llega aquí y actualiza la app local.
+onSnapshot(STATE_DOC, (snap) => {
+  if (!snap.exists()) return;
+  applyingRemote = true;
+  state = { ...EMPTY_STATE, ...snap.data() };
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  listeners.forEach((fn) => fn());
+  applyingRemote = false;
+}, (err) => console.warn('No se pudo escuchar Firestore:', err.message));
 
 export function onChange(fn) {
   listeners.add(fn);

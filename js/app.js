@@ -791,4 +791,7 @@ function render() {
   else if (route.screen === 'plan') renderPlan();
 }
 
+// Cuando llega un cambio desde el otro dispositivo (Firestore), refresca la pantalla actual.
+store.onChange(() => render());
+
 render();

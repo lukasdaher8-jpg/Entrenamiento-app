@@ -7,6 +7,7 @@ const SHELL = [
   './js/data/catalog.js',
   './js/data/dates.js',
   './js/data/store.js',
+  './js/data/firebase.js',
   './manifest.webmanifest',
   './calendario.ics',
 ];
