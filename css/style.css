@@ -1,16 +1,19 @@
+/* Tema "asesino de hechiceros": negro/carbón + rojo sangre + acento hueso/dorado.
+   Diseño propio (paleta y tipografía), no usa arte del anime. */
 :root {
   color-scheme: dark;
-  --bg: #12141a;
-  --card: #1c1f28;
-  --card-alt: #232733;
-  --text: #eef0f4;
-  --text-dim: #9aa1b2;
-  --accent: #4f8cff;
-  --accent-dim: #2a3a5c;
+  --bg: #0b0a0c;
+  --card: #17151a;
+  --card-alt: #201d23;
+  --text: #ece6e0;
+  --text-dim: #9a9088;
+  --accent: #a91e2c;
+  --accent-dim: #3a1216;
+  --accent2: #c9a35c;
   --good: #3ecf7e;
-  --warn: #f2b84b;
-  --bad: #ef5a5a;
-  --border: #2c303c;
+  --warn: #c9a35c;
+  --bad: #ff5a4d;
+  --border: #2a2528;
   font-size: 16px;
 }
 
@@ -21,8 +24,16 @@ html, body {
   padding: 0;
   background: var(--bg);
   color: var(--text);
-  font-family: -apple-system, "Segoe UI", Roboto, system-ui, sans-serif;
+  font-family: 'Inter', -apple-system, "Segoe UI", Roboto, system-ui, sans-serif;
   -webkit-tap-highlight-color: transparent;
+}
+
+.display, h1, h2,
+.header .session,
+.exname,
+.navicon + span {
+  font-family: 'Bebas Neue', 'Inter', sans-serif;
+  letter-spacing: 0.03em;
 }
 
 body {
@@ -48,8 +59,20 @@ h1, h2, h3 { margin: 0 0 4px; }
   letter-spacing: 0.04em;
 }
 .header .session {
-  font-size: 1.6rem;
-  font-weight: 700;
+  font-size: 2rem;
+  font-weight: 400;
+  text-transform: uppercase;
+  position: relative;
+  display: inline-block;
+  padding-bottom: 4px;
+}
+.header .session::after {
+  content: "";
+  position: absolute;
+  left: 0; bottom: 0;
+  width: 46px;
+  height: 3px;
+  background: var(--accent);
 }
 .header .date {
   color: var(--text-dim);

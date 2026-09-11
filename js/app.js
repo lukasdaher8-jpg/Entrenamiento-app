@@ -1,6 +1,7 @@
 import { CONFIG, EXERCISES, exercisesForSession } from './data/catalog.js';
 import { todayISO, weekAndDayFor, sessionFor, formatLong } from './data/dates.js';
 import { muscleIconSvg } from './data/muscleIcons.js';
+import { SUBSTITUTE_IMAGES } from './data/substituteImages.js';
 import { auth, signIn, onAuthStateChanged, signOut } from './data/firebase.js';
 import * as store from './data/store.js';
 
@@ -163,7 +164,7 @@ function checkForPR(effName, day, week, s, unilateral) {
     const detail = unilateral
       ? `${fmtVal(s.kgR)}×${fmtVal(s.repsR)} / ${fmtVal(s.kgL)}×${fmtVal(s.repsL)}`
       : `${s.kg}×${s.reps}`;
-    toast(`🏆 ¡Nuevo PR en ${effName}! ${detail}`);
+    toast(`⚔️ ¡Nuevo PR en ${effName}! ${detail}`);
   }
 }
 
@@ -405,9 +406,12 @@ function renderEjercicio(session, name) {
 
     <div class="card">
       <div class="muscle-icon-wrap">
-        ${ex.image
-          ? `<img class="ex-photo" src="icons/exercises/${ex.image}/0.jpg" alt="${escapeAttr(ex.name)}" /><div class="mi-equip">${ex.equipment}</div>`
-          : muscleIconSvg(ex.muscle, ex.equipment, !!ex.unilateral)}
+        ${(() => {
+          const imgId = subName ? SUBSTITUTE_IMAGES[subName] : ex.image;
+          return imgId
+            ? `<img class="ex-photo" src="icons/exercises/${imgId}/0.jpg" alt="${escapeAttr(effName)}" /><div class="mi-equip">${ex.equipment}</div>`
+            : muscleIconSvg(ex.muscle, ex.equipment, !!ex.unilateral);
+        })()}
       </div>
       <div class="exmeta">Objetivo: ${ex.repsTarget} reps · RIR ${ex.rir} · Descanso ${ex.rest}${ex.initialLoad ? ` · Carga inicial ${ex.initialLoad}` : ''}</div>
       ${ex.notes ? `<div class="exmeta" style="margin-top:4px">${ex.notes}</div>` : ''}

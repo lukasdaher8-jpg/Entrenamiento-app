@@ -29,8 +29,8 @@ function New-Icon($path, $size, $padding, $bg, $fg) {
 $dir = "C:\Users\PC\Documents\Vida Personal\Entrenamiento\icons"
 New-Item -ItemType Directory -Force -Path $dir | Out-Null
 
-$bg = [System.Drawing.Color]::FromArgb(255, 0x12, 0x14, 0x1a)
-$fg = [System.Drawing.Color]::FromArgb(255, 0x4f, 0x8c, 0xff)
+$bg = [System.Drawing.Color]::FromArgb(255, 0x0b, 0x0a, 0x0c)
+$fg = [System.Drawing.Color]::FromArgb(255, 0xa9, 0x1e, 0x2c)
 
 New-Icon "$dir\icon-192.png" 192 30 $bg $fg
 New-Icon "$dir\icon-512.png" 512 80 $bg $fg
