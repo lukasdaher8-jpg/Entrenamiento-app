@@ -6,9 +6,10 @@ const STORAGE_KEY = 'entrenamiento_v1';
 function load() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : { setLogs: {}, dayLogs: {}, measurements: {} };
+    const data = raw ? JSON.parse(raw) : {};
+    return { setLogs: {}, dayLogs: {}, measurements: {}, substitutions: {}, ...data };
   } catch {
-    return { setLogs: {}, dayLogs: {}, measurements: {} };
+    return { setLogs: {}, dayLogs: {}, measurements: {}, substitutions: {} };
   }
 }
 
@@ -53,7 +54,7 @@ export function lastSetLogFor(exerciseName, day, beforeWeek) {
     const name = parts.slice(2).join('_');
     if (name !== exerciseName || keyDay !== day) continue;
     const week = Number(parts[0]);
-    if (week < beforeWeek && week > bestWeek && entry.sets && entry.sets.some((s) => s.kg)) {
+    if (week < beforeWeek && week > bestWeek && entry.sets && entry.sets.some((s) => s.kg || s.kgR || s.kgL)) {
       bestWeek = week;
       best = entry;
     }
@@ -96,4 +97,21 @@ export function allDayLogs() {
 
 export function allSetLogs() {
   return state.setLogs;
+}
+
+// --- substitutions: reemplazo de un ejercicio del catálogo por un sustituto, para un día
+// concreto (no altera el plan; solo afecta qué se registra ese día en ese cupo de la sesión) ---
+export function substitutionKey(week, day, originalName) {
+  return `${week}_${day}_${originalName}`;
+}
+
+export function getSubstitution(week, day, originalName) {
+  return state.substitutions[substitutionKey(week, day, originalName)] || null;
+}
+
+export function setSubstitution(week, day, originalName, substituteName) {
+  const key = substitutionKey(week, day, originalName);
+  if (substituteName) state.substitutions[key] = substituteName;
+  else delete state.substitutions[key];
+  persist();
 }

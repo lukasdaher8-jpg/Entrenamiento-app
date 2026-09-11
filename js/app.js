@@ -1,5 +1,6 @@
 import { CONFIG, EXERCISES, exercisesForSession } from './data/catalog.js';
 import { todayISO, weekAndDayFor, sessionFor, formatLong } from './data/dates.js';
+import { muscleIconSvg } from './data/muscleIcons.js';
 import * as store from './data/store.js';
 
 const app = document.getElementById('app');
@@ -35,16 +36,25 @@ function completedCount(setLog) {
 
 function ensureSets(exercise, existing) {
   const sets = [];
+  const blank = exercise.unilateral
+    ? { kgR: '', repsR: '', kgL: '', repsL: '', done: false }
+    : { kg: '', reps: '', done: false };
   for (let i = 0; i < exercise.sets; i++) {
-    sets.push((existing && existing.sets && existing.sets[i]) || { kg: '', reps: '', done: false });
+    sets.push((existing && existing.sets && existing.sets[i]) || { ...blank });
   }
   return sets;
+}
+
+// Nombre bajo el cual se registra hoy este cupo de la sesión: el del catálogo, o el sustituto
+// elegido para este día si el usuario cambió de ejercicio (ver store.setSubstitution).
+function effectiveNameFor(ex, week, day) {
+  return store.getSubstitution(week, day, ex.name) || ex.name;
 }
 
 function findNextPending(week, day, session) {
   const list = exercisesForSession(session);
   for (const ex of list) {
-    const log = store.getSetLog(week, day, ex.name);
+    const log = store.getSetLog(week, day, effectiveNameFor(ex, week, day));
     if (!isSetComplete(log, ex.sets)) return ex;
   }
   return null;
@@ -85,7 +95,7 @@ function renderHoy() {
 
   const list = exercisesForSession(session);
   const total = list.length;
-  const doneCount = list.filter((ex) => isSetComplete(store.getSetLog(week, day, ex.name), ex.sets)).length;
+  const doneCount = list.filter((ex) => isSetComplete(store.getSetLog(week, day, effectiveNameFor(ex, week, day)), ex.sets)).length;
   const pct = total ? Math.round((doneCount / total) * 100) : 0;
   const allDone = doneCount === total;
   const cierre = dayLog || {};
@@ -113,12 +123,14 @@ function renderHoy() {
     <div class="card">
       <ul class="exlist" id="exlist">
         ${list.map((ex) => {
-          const log = store.getSetLog(week, day, ex.name);
+          const effName = effectiveNameFor(ex, week, day);
+          const isSub = effName !== ex.name;
+          const log = store.getSetLog(week, day, effName);
           const c = completedCount(log);
           const complete = c >= ex.sets;
           return `<li data-ex="${escapeAttr(ex.name)}" class="${complete ? 'done' : ''}">
             <div>
-              <div class="exname">${ex.name}</div>
+              <div class="exname">${effName}${isSub ? ' <span class="tag">sustituto</span>' : ''}</div>
               <div class="exmeta">${ex.muscle} · ${ex.repsTarget} reps · RIR ${ex.rir}</div>
             </div>
             <div class="exstatus ${complete ? 'complete' : ''}">${complete ? '✓' : `${c}/${ex.sets}`}</div>
@@ -187,39 +199,83 @@ function renderHoy() {
 
 // ---------------- EJERCICIO ----------------
 
+function fmtVal(v) {
+  return v === '' || v === null || v === undefined ? '—' : v;
+}
+
+function setRowBilateral(labelHtml, kg, reps, done, extraAttr) {
+  return `
+    <div class="setrow" ${extraAttr}>
+      <div class="setnum">${labelHtml}</div>
+      <div class="stepper" data-field="kg">
+        <button data-d="-1">−</button>
+        <div class="val">${fmtVal(kg)}<span class="unit"> kg</span></div>
+        <button data-d="1">+</button>
+      </div>
+      <div class="stepper" data-field="reps">
+        <button data-d="-1">−</button>
+        <div class="val">${fmtVal(reps)}<span class="unit"> reps</span></div>
+        <button data-d="1">+</button>
+      </div>
+      <button class="checkbtn ${done ? 'checked' : ''}" data-check>✓</button>
+    </div>
+  `;
+}
+
+function miniStepper(field, val, unit) {
+  return `
+    <div class="stepper mini" data-field="${field}">
+      <button data-d="-1">−</button>
+      <div class="val">${fmtVal(val)}<span class="unit"> ${unit}</span></div>
+      <button data-d="1">+</button>
+    </div>
+  `;
+}
+
+function setRowUnilateral(labelHtml, s, extraAttr) {
+  return `
+    <div class="setrow unilateral" ${extraAttr}>
+      <div class="setnum">${labelHtml}</div>
+      <div class="uni-sides">
+        <div class="side-row">
+          <span class="side-label">Der.</span>
+          ${miniStepper('kgR', s.kgR, 'kg')}
+          ${miniStepper('repsR', s.repsR, 'reps')}
+        </div>
+        <div class="side-row">
+          <span class="side-label">Izq.</span>
+          ${miniStepper('kgL', s.kgL, 'kg')}
+          ${miniStepper('repsL', s.repsL, 'reps')}
+        </div>
+      </div>
+      <button class="checkbtn ${s.done ? 'checked' : ''}" data-check>✓</button>
+    </div>
+  `;
+}
+
+function formatSetsSummary(sets, unilateral) {
+  if (unilateral) {
+    return sets.filter((s) => s.kgR || s.kgL).map((s) => `D:${fmtVal(s.kgR)}×${fmtVal(s.repsR)} I:${fmtVal(s.kgL)}×${fmtVal(s.repsL)}`).join(', ');
+  }
+  return sets.filter((s) => s.kg).map((s) => `${s.kg}×${s.reps}`).join(', ');
+}
+
 function renderEjercicio(session, name) {
   const ex = exercisesForSession(session).find((e) => e.name === name);
   const { week, day } = weekAndDayFor(currentDateISO);
-  const existing = store.getSetLog(week, day, ex.name);
+  const subName = store.getSubstitution(week, day, ex.name);
+  const effName = subName || ex.name;
+  const existing = store.getSetLog(week, day, effName);
   const sets = ensureSets(ex, existing);
   const rirFinal = existing?.rirFinal ?? '';
   const discomfort = existing?.discomfort ?? 0;
   const notes = existing?.notes ?? '';
-  const prev = store.lastSetLogFor(ex.name, day, week);
+  const prev = store.lastSetLogFor(effName, day, week);
   let localDropSet = existing?.dropSet ? { ...existing.dropSet } : null;
-
-  function setRowHtml(labelHtml, kg, reps, done, extraAttr) {
-    return `
-      <div class="setrow" ${extraAttr}>
-        <div class="setnum">${labelHtml}</div>
-        <div class="stepper" data-field="kg">
-          <button data-d="-1">−</button>
-          <div class="val">${kg === '' || kg === null || kg === undefined ? '—' : kg}<span class="unit"> kg</span></div>
-          <button data-d="1">+</button>
-        </div>
-        <div class="stepper" data-field="reps">
-          <button data-d="-1">−</button>
-          <div class="val">${reps === '' || reps === null || reps === undefined ? '—' : reps}<span class="unit"> reps</span></div>
-          <button data-d="1">+</button>
-        </div>
-        <button class="checkbtn ${done ? 'checked' : ''}" data-check>✓</button>
-      </div>
-    `;
-  }
 
   function dropSetSectionHtml() {
     if (localDropSet) {
-      return setRowHtml('D', localDropSet.kg, localDropSet.reps, localDropSet.done, 'data-dropset="1"')
+      return setRowBilateral('D', localDropSet.kg, localDropSet.reps, localDropSet.done, 'data-dropset="1"')
         + `<button class="btn-secondary" id="removeDropset">Quitar drop set</button>`;
     }
     const hint = ex.dropSetSuggested ? ' <span class="tag" style="margin-left:4px">sugerido aquí</span>' : '';
@@ -232,7 +288,8 @@ function renderEjercicio(session, name) {
     </div>
     <div class="header">
       <div class="week">${ex.session} · ${ex.day}</div>
-      <h2>${ex.name}</h2>
+      <h2>${effName}</h2>
+      ${subName ? `<div class="exmeta">Sustituto de ${ex.name}</div>` : ''}
       <div>
         <span class="tag">${ex.muscle}</span>
         <span class="tag focus-${ex.focus.toLowerCase().includes('fuerza') ? 'fuerza' : 'hipertrofia'}">${ex.focus}</span>
@@ -240,18 +297,25 @@ function renderEjercicio(session, name) {
     </div>
 
     <div class="card">
+      <div class="muscle-icon-wrap">${muscleIconSvg(ex.muscle, ex.equipment, !!ex.unilateral)}</div>
       <div class="exmeta">Objetivo: ${ex.repsTarget} reps · RIR ${ex.rir} · Descanso ${ex.rest}${ex.initialLoad ? ` · Carga inicial ${ex.initialLoad}` : ''}</div>
       ${ex.notes ? `<div class="exmeta" style="margin-top:4px">${ex.notes}</div>` : ''}
-      ${prev ? `<button class="chip-prev" id="fillPrev">Última vez: ${prev.sets.filter(s=>s.kg).map(s=>`${s.kg}×${s.reps}`).join(', ') || '—'} · tocar para copiar</button>` : ''}
+      ${prev ? `<button class="chip-prev" id="fillPrev">Última vez: ${formatSetsSummary(prev.sets, ex.unilateral) || '—'} · tocar para copiar</button>` : ''}
       ${ex.substitutes?.length ? `
-        <details class="substitutes">
-          <summary>Sustitutos si no hay esta máquina</summary>
-          <ul>${ex.substitutes.map((s) => `<li>${s}</li>`).join('')}</ul>
-        </details>
+        <div class="substitutes">
+          <div class="subs-label">${subName ? 'Sustituyendo el original:' : 'Sustituir por (si no hay esta máquina):'}</div>
+          <div class="subs-options" id="subsOptions">
+            ${subName ? `<button class="chip-sub back" data-sub="">↩ Volver a ${escapeAttr(ex.name)}</button>` : ''}
+            ${ex.substitutes.filter((s) => s !== subName).map((s) => `<button class="chip-sub" data-sub="${escapeAttr(s)}">${s}</button>`).join('')}
+          </div>
+        </div>
       ` : ''}
 
       <div id="setrows">
-        ${sets.map((s, i) => setRowHtml(i + 1, s.kg, s.reps, s.done, `data-i="${i}"`)).join('')}
+        ${sets.map((s, i) => ex.unilateral
+          ? setRowUnilateral(i + 1, s, `data-i="${i}"`)
+          : setRowBilateral(i + 1, s.kg, s.reps, s.done, `data-i="${i}"`)
+        ).join('')}
       </div>
 
       <div id="dropsetContainer">${dropSetSectionHtml()}</div>
@@ -270,10 +334,17 @@ function renderEjercicio(session, name) {
 
   document.getElementById('back').addEventListener('click', () => setRoute({ screen: 'hoy' }));
 
+  document.getElementById('subsOptions')?.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-sub]');
+    if (!b) return;
+    store.setSubstitution(week, day, ex.name, b.dataset.sub || null);
+    setRoute({ screen: 'ejercicio', session, name: ex.name });
+  });
+
   let localSets = sets.map((s) => ({ ...s }));
 
   function persistSets() {
-    store.saveSetLog(week, day, ex.name, {
+    store.saveSetLog(week, day, effName, {
       sets: localSets,
       dropSet: localDropSet,
       rirFinal: document.querySelector('#rirrow button.active')?.dataset.r ?? '',
@@ -285,11 +356,12 @@ function renderEjercicio(session, name) {
   function stepRowField(target, field, delta, getVal, setVal) {
     const stepperEl = target.closest('.stepper');
     if (!stepperEl || stepperEl.dataset.field !== field) return false;
-    const step = field === 'kg' ? 2.5 : 1;
+    const isKg = field.startsWith('kg');
+    const step = isKg ? 2.5 : 1;
     const cur = Number(getVal()) || 0;
     const next = Math.max(0, Math.round((cur + delta * step) * 100) / 100);
     setVal(next);
-    stepperEl.querySelector('.val').innerHTML = `${next}<span class="unit"> ${field === 'kg' ? 'kg' : 'reps'}</span>`;
+    stepperEl.querySelector('.val').innerHTML = `${next}<span class="unit"> ${isKg ? 'kg' : 'reps'}</span>`;
     return true;
   }
 
@@ -321,9 +393,15 @@ function renderEjercicio(session, name) {
     const addBtn = document.getElementById('addDropset');
     if (addBtn) {
       addBtn.addEventListener('click', () => {
-        const lastWithKg = [...localSets].reverse().find((s) => s.kg);
-        const kg = lastWithKg ? Math.max(0, Math.round((lastWithKg.kg * 0.5) / 2.5) * 2.5) : '';
-        const reps = lastWithKg ? Math.round(lastWithKg.reps * 1.6) : '';
+        // El drop set siempre es un valor combinado; en unilaterales se basa en el lado
+        // derecho (referencia principal según la nota de la lesión de pierna).
+        const lastWithKg = ex.unilateral
+          ? [...localSets].reverse().find((s) => s.kgR)
+          : [...localSets].reverse().find((s) => s.kg);
+        const baseKg = ex.unilateral ? lastWithKg?.kgR : lastWithKg?.kg;
+        const baseReps = ex.unilateral ? lastWithKg?.repsR : lastWithKg?.reps;
+        const kg = baseKg ? Math.max(0, Math.round((baseKg * 0.5) / 2.5) * 2.5) : '';
+        const reps = baseReps ? Math.round(baseReps * 1.6) : '';
         localDropSet = { kg, reps, done: false };
         persistSets();
         renderDropsetContainer();
@@ -360,7 +438,11 @@ function renderEjercicio(session, name) {
   if (prev) {
     document.getElementById('fillPrev').addEventListener('click', () => {
       prev.sets.forEach((s, i) => {
-        if (localSets[i] && s.kg) {
+        if (!localSets[i]) return;
+        if (ex.unilateral) {
+          if (s.kgR) { localSets[i].kgR = s.kgR; localSets[i].repsR = s.repsR; }
+          if (s.kgL) { localSets[i].kgL = s.kgL; localSets[i].repsL = s.repsL; }
+        } else if (s.kg) {
           localSets[i].kg = s.kg;
           localSets[i].reps = s.reps;
         }
