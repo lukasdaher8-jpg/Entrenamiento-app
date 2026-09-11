@@ -258,6 +258,12 @@ h1, h2, h3 { margin: 0 0 4px; }
   width: 96px;
   height: 146px;
 }
+.ex-photo {
+  width: 100%;
+  max-width: 320px;
+  border-radius: 12px;
+  display: block;
+}
 .mi-body { fill: #3a4054; }
 .mi-highlight { fill: var(--warn); opacity: 0.88; }
 .mi-side { font-size: 9px; fill: var(--text-dim); }

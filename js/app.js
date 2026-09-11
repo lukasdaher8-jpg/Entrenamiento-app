@@ -297,7 +297,11 @@ function renderEjercicio(session, name) {
     </div>
 
     <div class="card">
-      <div class="muscle-icon-wrap">${muscleIconSvg(ex.muscle, ex.equipment, !!ex.unilateral)}</div>
+      <div class="muscle-icon-wrap">
+        ${ex.image
+          ? `<img class="ex-photo" src="icons/exercises/${ex.image}/0.jpg" alt="${escapeAttr(ex.name)}" /><div class="mi-equip">${ex.equipment}</div>`
+          : muscleIconSvg(ex.muscle, ex.equipment, !!ex.unilateral)}
+      </div>
       <div class="exmeta">Objetivo: ${ex.repsTarget} reps · RIR ${ex.rir} · Descanso ${ex.rest}${ex.initialLoad ? ` · Carga inicial ${ex.initialLoad}` : ''}</div>
       ${ex.notes ? `<div class="exmeta" style="margin-top:4px">${ex.notes}</div>` : ''}
       ${prev ? `<button class="chip-prev" id="fillPrev">Última vez: ${formatSetsSummary(prev.sets, ex.unilateral) || '—'} · tocar para copiar</button>` : ''}

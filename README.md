@@ -19,10 +19,17 @@ Abrir http://localhost:8088
 - [x] Pantalla Medidas: peso, cintura, sueño, calorías, proteína
 - [x] Pantalla Plan: catálogo de referencia (solo lectura)
 - [x] PWA instalable (manifest + service worker, funciona offline)
+- [x] Foto real por ejercicio, sustitutos seleccionables, drop sets, series por lado (unilateral)
 - [ ] Sincronización entre dispositivos (Firebase Firestore) — pendiente de config del proyecto
+- [ ] Temporizador de descanso automático, detección de PR, gráfico de molestia de pierna
 - [ ] Edición del plan desde la app
-- [ ] Gráficos de progreso (e1RM, volumen, adherencia)
 - [ ] Integración con Google Calendar
+
+## Imágenes de ejercicios
+
+`icons/exercises/<id>/0.jpg` — fotos de [free-exercise-db](https://github.com/yuhonas/free-exercise-db),
+dominio público (Unlicense). El mapeo nombre en español → id del dataset está en
+`js/data/catalog.js` (campo `image`).
 
 ## Estructura
 
