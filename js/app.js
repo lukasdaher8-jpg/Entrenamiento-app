@@ -196,6 +196,35 @@ function renderEjercicio(session, name) {
   const discomfort = existing?.discomfort ?? 0;
   const notes = existing?.notes ?? '';
   const prev = store.lastSetLogFor(ex.name, day, week);
+  let localDropSet = existing?.dropSet ? { ...existing.dropSet } : null;
+
+  function setRowHtml(labelHtml, kg, reps, done, extraAttr) {
+    return `
+      <div class="setrow" ${extraAttr}>
+        <div class="setnum">${labelHtml}</div>
+        <div class="stepper" data-field="kg">
+          <button data-d="-1">−</button>
+          <div class="val">${kg === '' || kg === null || kg === undefined ? '—' : kg}<span class="unit"> kg</span></div>
+          <button data-d="1">+</button>
+        </div>
+        <div class="stepper" data-field="reps">
+          <button data-d="-1">−</button>
+          <div class="val">${reps === '' || reps === null || reps === undefined ? '—' : reps}<span class="unit"> reps</span></div>
+          <button data-d="1">+</button>
+        </div>
+        <button class="checkbtn ${done ? 'checked' : ''}" data-check>✓</button>
+      </div>
+    `;
+  }
+
+  function dropSetSectionHtml() {
+    if (localDropSet) {
+      return setRowHtml('D', localDropSet.kg, localDropSet.reps, localDropSet.done, 'data-dropset="1"')
+        + `<button class="btn-secondary" id="removeDropset">Quitar drop set</button>`;
+    }
+    const hint = ex.dropSetSuggested ? ' <span class="tag" style="margin-left:4px">sugerido aquí</span>' : '';
+    return `<button class="btn-secondary" id="addDropset">+ Añadir drop set${hint}</button>`;
+  }
 
   app.innerHTML = `
     <div class="backbar">
@@ -214,25 +243,18 @@ function renderEjercicio(session, name) {
       <div class="exmeta">Objetivo: ${ex.repsTarget} reps · RIR ${ex.rir} · Descanso ${ex.rest}${ex.initialLoad ? ` · Carga inicial ${ex.initialLoad}` : ''}</div>
       ${ex.notes ? `<div class="exmeta" style="margin-top:4px">${ex.notes}</div>` : ''}
       ${prev ? `<button class="chip-prev" id="fillPrev">Última vez: ${prev.sets.filter(s=>s.kg).map(s=>`${s.kg}×${s.reps}`).join(', ') || '—'} · tocar para copiar</button>` : ''}
+      ${ex.substitutes?.length ? `
+        <details class="substitutes">
+          <summary>Sustitutos si no hay esta máquina</summary>
+          <ul>${ex.substitutes.map((s) => `<li>${s}</li>`).join('')}</ul>
+        </details>
+      ` : ''}
 
       <div id="setrows">
-        ${sets.map((s, i) => `
-          <div class="setrow" data-i="${i}">
-            <div class="setnum">${i + 1}</div>
-            <div class="stepper" data-field="kg">
-              <button data-d="-1">−</button>
-              <div class="val">${s.kg === '' ? '—' : s.kg}<span class="unit"> kg</span></div>
-              <button data-d="1">+</button>
-            </div>
-            <div class="stepper" data-field="reps">
-              <button data-d="-1">−</button>
-              <div class="val">${s.reps === '' ? '—' : s.reps}<span class="unit"> reps</span></div>
-              <button data-d="1">+</button>
-            </div>
-            <button class="checkbtn ${s.done ? 'checked' : ''}" data-check>✓</button>
-          </div>
-        `).join('')}
+        ${sets.map((s, i) => setRowHtml(i + 1, s.kg, s.reps, s.done, `data-i="${i}"`)).join('')}
       </div>
+
+      <div id="dropsetContainer">${dropSetSectionHtml()}</div>
 
       <label class="field-label">RIR final</label>
       <div class="rirrow" id="rirrow">
@@ -253,10 +275,22 @@ function renderEjercicio(session, name) {
   function persistSets() {
     store.saveSetLog(week, day, ex.name, {
       sets: localSets,
+      dropSet: localDropSet,
       rirFinal: document.querySelector('#rirrow button.active')?.dataset.r ?? '',
       discomfort: readStepperValue('exDiscomfort'),
       notes: document.getElementById('exNote').value,
     });
+  }
+
+  function stepRowField(target, field, delta, getVal, setVal) {
+    const stepperEl = target.closest('.stepper');
+    if (!stepperEl || stepperEl.dataset.field !== field) return false;
+    const step = field === 'kg' ? 2.5 : 1;
+    const cur = Number(getVal()) || 0;
+    const next = Math.max(0, Math.round((cur + delta * step) * 100) / 100);
+    setVal(next);
+    stepperEl.querySelector('.val').innerHTML = `${next}<span class="unit"> ${field === 'kg' ? 'kg' : 'reps'}</span>`;
+    return true;
   }
 
   document.getElementById('setrows').addEventListener('click', (e) => {
@@ -267,21 +301,61 @@ function renderEjercicio(session, name) {
       localSets[i].done = !localSets[i].done;
       e.target.classList.toggle('checked', localSets[i].done);
       persistSets();
-      updateHeaderIfDone();
       return;
     }
     const stepperEl = e.target.closest('.stepper');
     if (stepperEl && e.target.matches('button')) {
       const field = stepperEl.dataset.field;
       const delta = Number(e.target.dataset.d);
-      const step = field === 'kg' ? 2.5 : 1;
-      const cur = Number(localSets[i][field]) || 0;
-      const next = Math.max(0, Math.round((cur + delta * step) * 100) / 100);
-      localSets[i][field] = next;
-      stepperEl.querySelector('.val').innerHTML = `${next}<span class="unit"> ${field === 'kg' ? 'kg' : 'reps'}</span>`;
+      stepRowField(e.target, field, delta, () => localSets[i][field], (v) => { localSets[i][field] = v; });
       persistSets();
     }
   });
+
+  function renderDropsetContainer() {
+    document.getElementById('dropsetContainer').innerHTML = dropSetSectionHtml();
+    bindDropsetButtons();
+  }
+
+  function bindDropsetButtons() {
+    const addBtn = document.getElementById('addDropset');
+    if (addBtn) {
+      addBtn.addEventListener('click', () => {
+        const lastWithKg = [...localSets].reverse().find((s) => s.kg);
+        const kg = lastWithKg ? Math.max(0, Math.round((lastWithKg.kg * 0.5) / 2.5) * 2.5) : '';
+        const reps = lastWithKg ? Math.round(lastWithKg.reps * 1.6) : '';
+        localDropSet = { kg, reps, done: false };
+        persistSets();
+        renderDropsetContainer();
+      });
+      return;
+    }
+    document.getElementById('removeDropset').addEventListener('click', () => {
+      localDropSet = null;
+      persistSets();
+      renderDropsetContainer();
+    });
+  }
+
+  // Delegación fija en el contenedor (se une una sola vez); los botones internos
+  // (agregar/quitar) se re-vinculan cada vez que se reconstruye su HTML.
+  document.getElementById('dropsetContainer').addEventListener('click', (e) => {
+    if (!localDropSet) return;
+    if (e.target.matches('[data-check]')) {
+      localDropSet.done = !localDropSet.done;
+      e.target.classList.toggle('checked', localDropSet.done);
+      persistSets();
+      return;
+    }
+    if (e.target.matches('.stepper button')) {
+      const field = e.target.closest('.stepper').dataset.field;
+      const delta = Number(e.target.dataset.d);
+      stepRowField(e.target, field, delta, () => localDropSet[field], (v) => { localDropSet[field] = v; });
+      persistSets();
+    }
+  });
+
+  bindDropsetButtons();
 
   if (prev) {
     document.getElementById('fillPrev').addEventListener('click', () => {

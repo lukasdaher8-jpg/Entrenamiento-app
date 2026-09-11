@@ -248,6 +248,24 @@ h1, h2, h3 { margin: 0 0 4px; }
   margin: 6px 0 2px;
 }
 
+.substitutes {
+  margin-top: 10px;
+  font-size: 0.88rem;
+}
+.substitutes summary {
+  color: var(--accent);
+  cursor: pointer;
+  list-style: none;
+}
+.substitutes summary::-webkit-details-marker { display: none; }
+.substitutes summary::before { content: "🔁 "; }
+.substitutes ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: var(--text-dim);
+}
+.substitutes li { margin-bottom: 3px; }
+
 .rirrow {
   display: flex;
   gap: 8px;
