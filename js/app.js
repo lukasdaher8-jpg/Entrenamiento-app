@@ -60,6 +60,112 @@ function findNextPending(week, day, session) {
   return null;
 }
 
+// ---------------- Temporizador de descanso ----------------
+
+let restEndAt = null;
+let restTotalSeconds = 0;
+let restTimerHandle = null;
+
+function parseRestSeconds(restStr) {
+  const m = String(restStr || '').match(/(\d+):(\d{2})/);
+  return m ? Number(m[1]) * 60 + Number(m[2]) : 90;
+}
+
+function formatMMSS(totalSeconds) {
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function startRestTimer(seconds) {
+  restTotalSeconds = seconds;
+  restEndAt = Date.now() + seconds * 1000;
+  ensureRestBanner();
+  clearInterval(restTimerHandle);
+  restTimerHandle = setInterval(tickRestTimer, 250);
+  tickRestTimer();
+}
+
+function stopRestTimer() {
+  restEndAt = null;
+  clearInterval(restTimerHandle);
+  document.getElementById('restBanner')?.remove();
+}
+
+function ensureRestBanner() {
+  if (document.getElementById('restBanner')) return;
+  const el = document.createElement('div');
+  el.id = 'restBanner';
+  el.className = 'rest-banner';
+  el.innerHTML = `
+    <div class="rest-fill"></div>
+    <div class="rest-content">
+      <span>Descanso</span>
+      <span class="rest-time"></span>
+      <button class="rest-skip">Saltar</button>
+    </div>
+  `;
+  document.body.appendChild(el);
+  el.querySelector('.rest-skip').addEventListener('click', stopRestTimer);
+}
+
+function tickRestTimer() {
+  if (restEndAt === null) return;
+  const el = document.getElementById('restBanner');
+  if (!el) return;
+  const remaining = Math.max(0, Math.round((restEndAt - Date.now()) / 1000));
+  el.querySelector('.rest-time').textContent = formatMMSS(remaining);
+  const pct = Math.max(0, Math.min(100, 100 * (1 - remaining / restTotalSeconds)));
+  el.querySelector('.rest-fill').style.width = `${pct}%`;
+  if (remaining <= 0) {
+    clearInterval(restTimerHandle);
+    el.classList.add('done');
+    el.querySelector('span').textContent = '¡Listo!';
+    if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+    setTimeout(stopRestTimer, 2500);
+  }
+}
+
+// ---------------- Detección de PR ----------------
+
+function computeE1RM(kg, reps) {
+  if (!kg || !reps) return 0;
+  return kg * (1 + reps / 30);
+}
+
+function e1rmsForSet(s, unilateral) {
+  if (unilateral) return [computeE1RM(s.kgR, s.repsR), computeE1RM(s.kgL, s.repsL)];
+  return [computeE1RM(s.kg, s.reps)];
+}
+
+function bestPriorE1RM(effName, day, beforeWeek, unilateral) {
+  let best = 0;
+  const logs = store.allSetLogs();
+  for (const key of Object.keys(logs)) {
+    const parts = key.split('_');
+    const week = Number(parts[0]);
+    const keyDay = parts[1];
+    const name = parts.slice(2).join('_');
+    if (name !== effName || keyDay !== day || week >= beforeWeek) continue;
+    const entry = logs[key];
+    (entry.sets || []).forEach((s) => e1rmsForSet(s, unilateral).forEach((v) => { if (v > best) best = v; }));
+    if (entry.dropSet) computeE1RM(entry.dropSet.kg, entry.dropSet.reps) > best && (best = computeE1RM(entry.dropSet.kg, entry.dropSet.reps));
+  }
+  return best;
+}
+
+function checkForPR(effName, day, week, s, unilateral) {
+  const prior = bestPriorE1RM(effName, day, week, unilateral);
+  if (prior <= 0) return;
+  const currentBest = Math.max(...e1rmsForSet(s, unilateral));
+  if (currentBest > prior) {
+    const detail = unilateral
+      ? `${fmtVal(s.kgR)}×${fmtVal(s.repsR)} / ${fmtVal(s.kgL)}×${fmtVal(s.repsL)}`
+      : `${s.kg}×${s.reps}`;
+    toast(`🏆 ¡Nuevo PR en ${effName}! ${detail}`);
+  }
+}
+
 function toast(msg) {
   let el = document.getElementById('toast');
   if (!el) {
@@ -377,6 +483,10 @@ function renderEjercicio(session, name) {
       localSets[i].done = !localSets[i].done;
       e.target.classList.toggle('checked', localSets[i].done);
       persistSets();
+      if (localSets[i].done) {
+        startRestTimer(parseRestSeconds(ex.rest));
+        checkForPR(effName, day, week, localSets[i], ex.unilateral);
+      }
       return;
     }
     const stepperEl = e.target.closest('.stepper');
@@ -427,6 +537,10 @@ function renderEjercicio(session, name) {
       localDropSet.done = !localDropSet.done;
       e.target.classList.toggle('checked', localDropSet.done);
       persistSets();
+      if (localDropSet.done) {
+        startRestTimer(parseRestSeconds(ex.rest));
+        checkForPR(effName, day, week, localDropSet, false);
+      }
       return;
     }
     if (e.target.matches('.stepper button')) {
@@ -500,6 +614,8 @@ function renderMedidas() {
       <textarea id="mNote" placeholder="Opcional">${m.notes || ''}</textarea>
       <button class="btn-primary" id="saveMed">Guardar medidas de hoy</button>
     </div>
+
+    ${discomfortChartHtml()}
   `;
 
   bindStepper('weight', () => {});
@@ -521,6 +637,63 @@ function renderMedidas() {
     });
     toast('Medidas guardadas');
   });
+}
+
+// ---------------- Gráfico de molestia de pierna ----------------
+// Combina la molestia general del cierre de sesión (dayLogs) y la de Medidas diarias,
+// promediada por semana. Es la señal de seguimiento más directa para la neuropraxia de pierna.
+
+function weeklyDiscomfortSeries() {
+  const sums = {};
+  const add = (week, val) => {
+    if (val === null || val === undefined || val === '' || Number.isNaN(Number(val))) return;
+    if (!sums[week]) sums[week] = { total: 0, count: 0 };
+    sums[week].total += Number(val);
+    sums[week].count += 1;
+  };
+  Object.entries(store.allDayLogs()).forEach(([key, log]) => add(Number(key.split('_')[0]), log.discomfort));
+  Object.values(store.allMeasurements()).forEach((m) => add(m.week, m.discomfort));
+
+  const series = [];
+  for (let w = 1; w <= CONFIG.weeks; w++) {
+    const s = sums[w];
+    series.push({ week: w, avg: s ? s.total / s.count : null });
+  }
+  return series;
+}
+
+function discomfortTrendAlert(series) {
+  const withData = series.filter((w) => w.avg !== null);
+  if (withData.length < 3) return null;
+  const [a, b, c] = withData.slice(-3);
+  if (c.avg > b.avg && b.avg > a.avg && c.avg >= 3) {
+    return `⚠️ La molestia de pierna lleva 3 semanas seguidas subiendo (semana ${a.week}: ${a.avg.toFixed(1)} → semana ${c.week}: ${c.avg.toFixed(1)}). Si continúa, considera bajar el rango/carga en pierna afectada o consultar con tu especialista.`;
+  }
+  return null;
+}
+
+function discomfortChartHtml() {
+  const series = weeklyDiscomfortSeries();
+  const alert = discomfortTrendAlert(series);
+  const barW = 22;
+  const gap = 6;
+  const chartW = series.length * (barW + gap);
+  const bars = series.map((pt, i) => {
+    const x = i * (barW + gap);
+    const h = pt.avg === null ? 0 : Math.max(2, (pt.avg / 10) * 68);
+    const y = 70 - h;
+    const fill = pt.avg === null ? 'var(--border)' : pt.avg >= 6 ? 'var(--bad)' : pt.avg >= 3 ? 'var(--warn)' : 'var(--good)';
+    return `<rect x="${x}" y="${y}" width="${barW}" height="${h}" rx="3" fill="${fill}" />
+            <text x="${x + barW / 2}" y="86" text-anchor="middle" class="chart-label">${pt.week}</text>`;
+  }).join('');
+  return `
+    <div class="section-title">Molestia de pierna · tendencia semanal</div>
+    <div class="card">
+      ${alert ? `<div class="alert-box">${alert}</div>` : ''}
+      <svg viewBox="0 0 ${chartW} 92" class="discomfort-chart" preserveAspectRatio="xMinYMid meet">${bars}</svg>
+      <div class="exmeta">Promedio semanal (0-10): cierres de sesión + Medidas diarias. Semana = número de semana del plan.</div>
+    </div>
+  `;
 }
 
 // ---------------- PLAN (referencia de solo lectura) ----------------

@@ -390,6 +390,44 @@ textarea { resize: vertical; min-height: 60px; }
 }
 .toast.show { opacity: 1; }
 
+.rest-banner {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: 76px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  z-index: 45;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.35);
+}
+.rest-fill {
+  position: absolute;
+  inset: 0;
+  width: 0%;
+  background: var(--accent-dim);
+  transition: width 0.25s linear;
+}
+.rest-banner.done .rest-fill { background: var(--good); width: 100% !important; }
+.rest-content {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  font-weight: 700;
+}
+.rest-time { font-size: 1.1rem; }
+.rest-skip {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-size: 0.8rem;
+}
+
 .bottomnav {
   position: fixed;
   bottom: 0; left: 0; right: 0;
@@ -421,6 +459,25 @@ textarea { resize: vertical; min-height: 60px; }
   text-transform: uppercase;
   letter-spacing: 0.03em;
   margin: 20px 0 8px;
+}
+
+.discomfort-chart {
+  width: 100%;
+  height: 100px;
+  overflow: visible;
+}
+.chart-label {
+  font-size: 7px;
+  fill: var(--text-dim);
+}
+.alert-box {
+  background: rgba(242, 184, 75, 0.12);
+  border: 1px solid var(--warn);
+  color: var(--warn);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 0.85rem;
+  margin-bottom: 10px;
 }
 
 .restday {
