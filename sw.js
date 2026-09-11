@@ -8,6 +8,7 @@ const SHELL = [
   './js/data/dates.js',
   './js/data/store.js',
   './manifest.webmanifest',
+  './calendario.ics',
 ];
 
 self.addEventListener('install', (event) => {

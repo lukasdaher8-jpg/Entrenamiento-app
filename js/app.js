@@ -705,6 +705,16 @@ function renderPlan() {
       <div class="session">Plan · referencia</div>
       <div class="date">Semana ${CONFIG.weeks}-semanas · Objetivo ${CONFIG.calorieTarget} kcal / ${CONFIG.proteinTarget} g proteína</div>
     </div>
+    <div class="section-title">Calendario</div>
+    <div class="card">
+      <div class="exmeta">Un solo evento recurrente por día de sesión (Lunes = Push A, Martes = Pull A, …), 12 semanas, todo el día.</div>
+      <a class="btn-secondary" style="display:block;text-align:center;text-decoration:none;margin-top:8px" href="calendario.ics" download="calendario.ics">⬇ Descargar calendario.ics</a>
+      <div class="exmeta" style="margin-top:8px">
+        <b>Google Calendar (PC):</b> Configuración → Importar y exportar → Importar → elige este archivo.<br/>
+        <b>Google Calendar (celular):</b> primero impórtalo desde el PC con tu cuenta de Google — se sincroniza solo al celular.<br/>
+        Cuando la app esté publicada en un link fijo, este mismo calendario se podrá "suscribir por URL" para que se actualice solo si cambias el plan.
+      </div>
+    </div>
     ${sessions.map((s) => `
       <div class="section-title">${s} · ${exercisesForSession(s)[0]?.day || ''}</div>
       <div class="card">
