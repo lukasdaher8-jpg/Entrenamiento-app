@@ -1,6 +1,7 @@
 import { CONFIG, EXERCISES, exercisesForSession } from './data/catalog.js';
 import { todayISO, weekAndDayFor, sessionFor, formatLong } from './data/dates.js';
 import { muscleIconSvg } from './data/muscleIcons.js';
+import { auth, signIn, onAuthStateChanged, signOut } from './data/firebase.js';
 import * as store from './data/store.js';
 
 const app = document.getElementById('app');
@@ -731,7 +732,12 @@ function renderPlan() {
       </div>
     `).join('')}
     <div class="card exmeta">Edición del plan disponible próximamente. Por ahora, si quieres ajustar algo, dímelo directamente.</div>
+    <div class="card">
+      <div class="exmeta" style="margin-bottom:8px">Sesión: ${auth.currentUser?.email || ''}</div>
+      <button class="btn-secondary" id="signOutBtn">Cerrar sesión</button>
+    </div>
   `;
+  document.getElementById('signOutBtn').addEventListener('click', () => signOut(auth));
 }
 
 // ---------------- helpers de UI ----------------
@@ -794,4 +800,34 @@ function render() {
 // Cuando llega un cambio desde el otro dispositivo (Firestore), refresca la pantalla actual.
 store.onChange(() => render());
 
-render();
+// ---------------- Sesión (Google) ----------------
+// La app no muestra nada hasta saber si hay sesión: evita que se vea/edite sin login,
+// que es justo lo que protegen las reglas de Firestore del lado del servidor.
+
+let currentUser = null;
+
+function renderSignIn() {
+  bottomnav.style.display = 'none';
+  app.innerHTML = `
+    <div class="signin">
+      <h1>Entrenamiento</h1>
+      <p class="exmeta">Inicia sesión con tu cuenta de Google para sincronizar tu registro entre el celular y el PC.</p>
+      <button class="btn-primary" id="googleSignIn">Iniciar sesión con Google</button>
+    </div>
+  `;
+  document.getElementById('googleSignIn').addEventListener('click', () => {
+    signIn().catch((err) => toast('No se pudo iniciar sesión: ' + err.message));
+  });
+}
+
+onAuthStateChanged(auth, (user) => {
+  currentUser = user;
+  if (user) {
+    store.initCloudSync(user.uid);
+    bottomnav.style.display = 'flex';
+    render();
+  } else {
+    store.stopCloudSync();
+    renderSignIn();
+  }
+});

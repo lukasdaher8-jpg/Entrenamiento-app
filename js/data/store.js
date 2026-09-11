@@ -2,7 +2,7 @@
 // así que funciona sin señal); Firestore = fuente compartida entre dispositivos, sincronizada
 // en segundo plano. Todo lo demás en la app solo usa las funciones de este archivo.
 
-import { db, STATE_DOC, setDoc, onSnapshot } from './firebase.js';
+import { stateDocFor, setDoc, onSnapshot } from './firebase.js';
 
 const STORAGE_KEY = 'entrenamiento_v1';
 const EMPTY_STATE = { setLogs: {}, dayLogs: {}, measurements: {}, substitutions: {} };
@@ -21,6 +21,8 @@ let state = load();
 const listeners = new Set();
 let cloudSyncTimer = null;
 let applyingRemote = false;
+let stateDoc = null; // se fija al iniciar sesión (ver initCloudSync)
+let unsubscribeSnapshot = null;
 
 function persist() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
@@ -29,21 +31,33 @@ function persist() {
 }
 
 function scheduleCloudSync() {
+  if (!stateDoc) return; // sin sesión iniciada todavía: solo local
   clearTimeout(cloudSyncTimer);
   cloudSyncTimer = setTimeout(() => {
-    setDoc(STATE_DOC, state).catch((err) => console.warn('No se pudo sincronizar con Firestore:', err.message));
+    setDoc(stateDoc, state).catch((err) => console.warn('No se pudo sincronizar con Firestore:', err.message));
   }, 500);
 }
 
-// Cualquier cambio guardado desde otro dispositivo llega aquí y actualiza la app local.
-onSnapshot(STATE_DOC, (snap) => {
-  if (!snap.exists()) return;
-  applyingRemote = true;
-  state = { ...EMPTY_STATE, ...snap.data() };
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  listeners.forEach((fn) => fn());
-  applyingRemote = false;
-}, (err) => console.warn('No se pudo escuchar Firestore:', err.message));
+// Se llama una vez que el usuario inició sesión con Google (ver app.js). A partir de ahí,
+// cada cambio local se sube a su documento y cada cambio remoto (otro dispositivo) baja aquí.
+export function initCloudSync(uid) {
+  if (unsubscribeSnapshot) unsubscribeSnapshot();
+  stateDoc = stateDocFor(uid);
+  unsubscribeSnapshot = onSnapshot(stateDoc, (snap) => {
+    if (!snap.exists()) return;
+    applyingRemote = true;
+    state = { ...EMPTY_STATE, ...snap.data() };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    listeners.forEach((fn) => fn());
+    applyingRemote = false;
+  }, (err) => console.warn('No se pudo escuchar Firestore:', err.message));
+}
+
+export function stopCloudSync() {
+  if (unsubscribeSnapshot) unsubscribeSnapshot();
+  unsubscribeSnapshot = null;
+  stateDoc = null;
+}
 
 export function onChange(fn) {
   listeners.add(fn);
