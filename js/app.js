@@ -183,30 +183,30 @@ function toast(msg) {
   el._t = setTimeout(() => el.classList.remove('show'), 1400);
 }
 
-// ---------------- Foto personal (tu foto, no de terceros) ----------------
+// ---------------- Foto personal de fondo (tu foto, no de terceros) ----------------
 
-function photoWidgetHtml() {
+function applyBackgroundPhoto() {
   const photo = store.getProfilePhoto();
-  return `
-    <div class="photo-widget" id="photoWidget" title="Toca para cambiar tu foto">
-      ${photo ? `<img src="${photo}" alt="Tu foto" />` : `<span class="photo-placeholder">＋</span>`}
-      <input type="file" accept="image/*" id="photoInput" hidden />
-    </div>
-  `;
+  const bg = document.getElementById('bgPhoto');
+  if (!bg) return;
+  bg.style.backgroundImage = photo
+    ? `linear-gradient(rgba(11,10,12,0.72), rgba(11,10,12,0.72)), url(${photo})`
+    : 'none';
 }
 
-function bindPhotoWidget() {
-  const widget = document.getElementById('photoWidget');
-  const input = document.getElementById('photoInput');
-  if (!widget || !input) return;
-  widget.addEventListener('click', () => input.click());
+function bindBackgroundPhotoPicker() {
+  const btn = document.getElementById('bgPhotoBtn');
+  const input = document.getElementById('bgPhotoInput');
+  if (!btn || !input) return;
+  btn.addEventListener('click', () => input.click());
   input.addEventListener('change', async () => {
     const file = input.files[0];
     if (!file) return;
     try {
-      const dataUrl = await resizeImageFile(file, 320, 0.75);
+      const dataUrl = await resizeImageFile(file, 720, 0.75);
       store.setProfilePhoto(dataUrl);
-      render();
+      applyBackgroundPhoto();
+      toast('Foto de fondo actualizada');
     } catch {
       toast('No se pudo cargar la foto');
     }
@@ -245,17 +245,13 @@ function renderHoy() {
 
   if (!session) {
     app.innerHTML = `
-      <div class="header hoy-header">
-        <div>
-          <div class="week">Semana ${week}</div>
-          <div class="session">Descanso</div>
-          <div class="date">${cap(formatLong(currentDateISO))}</div>
-        </div>
-        ${photoWidgetHtml()}
+      <div class="header">
+        <div class="week">Semana ${week}</div>
+        <div class="session">Descanso</div>
+        <div class="date">${cap(formatLong(currentDateISO))}</div>
       </div>
       <div class="restday">Hoy toca descanso. Aprovecha para revisar Medidas si aún no registraste el peso de hoy.</div>
     `;
-    bindPhotoWidget();
     return;
   }
 
@@ -267,13 +263,10 @@ function renderHoy() {
   const cierre = dayLog || {};
 
   app.innerHTML = `
-    <div class="header hoy-header">
-      <div>
-        <div class="week">Semana ${week}</div>
-        <div class="session">${session}</div>
-        <div class="date">${cap(formatLong(currentDateISO))}</div>
-      </div>
-      ${photoWidgetHtml()}
+    <div class="header">
+      <div class="week">Semana ${week}</div>
+      <div class="session">${session}</div>
+      <div class="date">${cap(formatLong(currentDateISO))}</div>
     </div>
 
     <div class="card">
@@ -323,8 +316,6 @@ function renderHoy() {
       <button class="btn-primary" id="saveCierre">Guardar cierre</button>
     </div>
   `;
-
-  bindPhotoWidget();
 
   document.getElementById('attendance').addEventListener('click', (e) => {
     const b = e.target.closest('button');
@@ -933,10 +924,16 @@ function renderPlan() {
     `).join('')}
     <div class="card exmeta">Edición del plan disponible próximamente. Por ahora, si quieres ajustar algo, dímelo directamente.</div>
     <div class="card">
+      <div class="exmeta" style="margin-bottom:8px">Foto de fondo de la app (se sincroniza entre tus dispositivos)</div>
+      <button class="btn-secondary" id="bgPhotoBtn">🖼 Elegir foto de fondo</button>
+      <input type="file" accept="image/*" id="bgPhotoInput" hidden />
+    </div>
+    <div class="card">
       <div class="exmeta" style="margin-bottom:8px">Sesión: ${auth.currentUser?.email || ''}</div>
       <button class="btn-secondary" id="signOutBtn">Cerrar sesión</button>
     </div>
   `;
+  bindBackgroundPhotoPicker();
   document.getElementById('signOutBtn').addEventListener('click', () => signOut(auth));
 }
 
@@ -999,7 +996,10 @@ function render() {
 }
 
 // Cuando llega un cambio desde el otro dispositivo (Firestore), refresca la pantalla actual.
-store.onChange(() => render());
+store.onChange(() => {
+  render();
+  applyBackgroundPhoto();
+});
 
 // ---------------- Sesión (Google) ----------------
 // La app no muestra nada hasta saber si hay sesión: evita que se vea/edite sin login,
@@ -1027,6 +1027,7 @@ onAuthStateChanged(auth, (user) => {
     store.initCloudSync(user.uid);
     bottomnav.style.display = 'flex';
     render();
+    applyBackgroundPhoto();
   } else {
     store.stopCloudSync();
     renderSignIn();
