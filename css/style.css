@@ -484,6 +484,54 @@ textarea { resize: vertical; min-height: 60px; }
   margin: 20px 0 8px;
 }
 
+.hoy-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+.photo-widget {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--card-alt);
+  border: 2px solid var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.photo-widget img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.photo-placeholder {
+  color: var(--accent);
+  font-size: 1.4rem;
+  font-weight: 700;
+}
+
+.line-chart {
+  width: 100%;
+  height: 112px;
+  overflow: visible;
+}
+.progress-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+  font-size: 0.85rem;
+}
+.progress-table th, .progress-table td {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-dim);
+}
+.progress-table th { color: var(--text); font-weight: 700; }
+
 .discomfort-chart {
   width: 100%;
   height: 100px;

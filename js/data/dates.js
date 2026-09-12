@@ -44,3 +44,18 @@ export function addDaysISO(dateISO, days) {
   d.setDate(d.getDate() + days);
   return toISO(d);
 }
+
+// Inversa de weekAndDayFor: la fecha real de un (semana, día) dado del plan.
+export function dateForWeekDay(week, day) {
+  const start = parseISO(CONFIG.startDate);
+  const dayIndex = CONFIG.dayOrder.indexOf(day);
+  const diffDays = (week - 1) * 7 + dayIndex;
+  const d = new Date(start);
+  d.setDate(d.getDate() + diffDays);
+  return toISO(d);
+}
+
+export function formatShort(dateISO) {
+  const d = parseISO(dateISO);
+  return d.toLocaleDateString('es-CO', { day: 'numeric', month: 'short' });
+}

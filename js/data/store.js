@@ -5,7 +5,7 @@
 import { stateDocFor, setDoc, onSnapshot } from './firebase.js';
 
 const STORAGE_KEY = 'entrenamiento_v1';
-const EMPTY_STATE = { setLogs: {}, dayLogs: {}, measurements: {}, substitutions: {} };
+const EMPTY_STATE = { setLogs: {}, dayLogs: {}, measurements: {}, substitutions: {}, profilePhoto: null };
 
 function load() {
   try {
@@ -135,6 +135,16 @@ export function allDayLogs() {
 
 export function allSetLogs() {
   return state.setLogs;
+}
+
+// --- foto personal (se sincroniza como el resto: la misma en todos los dispositivos) ---
+export function getProfilePhoto() {
+  return state.profilePhoto;
+}
+
+export function setProfilePhoto(dataUrl) {
+  state.profilePhoto = dataUrl;
+  persist();
 }
 
 // --- substitutions: reemplazo de un ejercicio del catálogo por un sustituto, para un día

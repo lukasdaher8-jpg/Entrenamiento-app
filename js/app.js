@@ -1,5 +1,5 @@
 import { CONFIG, EXERCISES, exercisesForSession } from './data/catalog.js';
-import { todayISO, weekAndDayFor, sessionFor, formatLong } from './data/dates.js';
+import { todayISO, weekAndDayFor, sessionFor, formatLong, dateForWeekDay, formatShort } from './data/dates.js';
 import { muscleIconSvg } from './data/muscleIcons.js';
 import { SUBSTITUTE_IMAGES } from './data/substituteImages.js';
 import { auth, signIn, onAuthStateChanged, signOut } from './data/firebase.js';
@@ -10,6 +10,7 @@ const bottomnav = document.getElementById('bottomnav');
 
 let route = { screen: 'hoy' };
 let currentDateISO = todayISO();
+let progresoState = { exercise: null };
 
 function setRoute(next) {
   route = next;
@@ -182,6 +183,59 @@ function toast(msg) {
   el._t = setTimeout(() => el.classList.remove('show'), 1400);
 }
 
+// ---------------- Foto personal (tu foto, no de terceros) ----------------
+
+function photoWidgetHtml() {
+  const photo = store.getProfilePhoto();
+  return `
+    <div class="photo-widget" id="photoWidget" title="Toca para cambiar tu foto">
+      ${photo ? `<img src="${photo}" alt="Tu foto" />` : `<span class="photo-placeholder">＋</span>`}
+      <input type="file" accept="image/*" id="photoInput" hidden />
+    </div>
+  `;
+}
+
+function bindPhotoWidget() {
+  const widget = document.getElementById('photoWidget');
+  const input = document.getElementById('photoInput');
+  if (!widget || !input) return;
+  widget.addEventListener('click', () => input.click());
+  input.addEventListener('change', async () => {
+    const file = input.files[0];
+    if (!file) return;
+    try {
+      const dataUrl = await resizeImageFile(file, 320, 0.75);
+      store.setProfilePhoto(dataUrl);
+      render();
+    } catch {
+      toast('No se pudo cargar la foto');
+    }
+  });
+}
+
+function resizeImageFile(file, maxSize, quality) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
+        const w = Math.round(img.width * scale);
+        const h = Math.round(img.height * scale);
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = reject;
+      img.src = reader.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 // ---------------- HOY ----------------
 
 function renderHoy() {
@@ -191,13 +245,17 @@ function renderHoy() {
 
   if (!session) {
     app.innerHTML = `
-      <div class="header">
-        <div class="week">Semana ${week}</div>
-        <div class="session">Descanso</div>
-        <div class="date">${cap(formatLong(currentDateISO))}</div>
+      <div class="header hoy-header">
+        <div>
+          <div class="week">Semana ${week}</div>
+          <div class="session">Descanso</div>
+          <div class="date">${cap(formatLong(currentDateISO))}</div>
+        </div>
+        ${photoWidgetHtml()}
       </div>
       <div class="restday">Hoy toca descanso. Aprovecha para revisar Medidas si aún no registraste el peso de hoy.</div>
     `;
+    bindPhotoWidget();
     return;
   }
 
@@ -209,10 +267,13 @@ function renderHoy() {
   const cierre = dayLog || {};
 
   app.innerHTML = `
-    <div class="header">
-      <div class="week">Semana ${week}</div>
-      <div class="session">${session}</div>
-      <div class="date">${cap(formatLong(currentDateISO))}</div>
+    <div class="header hoy-header">
+      <div>
+        <div class="week">Semana ${week}</div>
+        <div class="session">${session}</div>
+        <div class="date">${cap(formatLong(currentDateISO))}</div>
+      </div>
+      ${photoWidgetHtml()}
     </div>
 
     <div class="card">
@@ -262,6 +323,8 @@ function renderHoy() {
       <button class="btn-primary" id="saveCierre">Guardar cierre</button>
     </div>
   `;
+
+  bindPhotoWidget();
 
   document.getElementById('attendance').addEventListener('click', (e) => {
     const b = e.target.closest('button');
@@ -701,6 +764,139 @@ function discomfortChartHtml() {
   `;
 }
 
+// ---------------- PROGRESO (peso corporal y peso cargado, comparables día a día) ----------------
+
+function lineChartSvg(values, labels, color) {
+  const valid = values.filter((v) => v !== null && v !== undefined);
+  if (!valid.length) return '<div class="exmeta">Sin datos todavía.</div>';
+  const min = Math.min(...valid);
+  const max = Math.max(...valid);
+  const range = max - min || 1;
+  const w = Math.max(240, values.length * 40);
+  const h = 100;
+  const padY = 14;
+  const stepX = values.length > 1 ? (w - 20) / (values.length - 1) : 0;
+  const pts = values.map((v, i) => {
+    if (v === null || v === undefined) return null;
+    const x = 10 + i * stepX;
+    const y = h - padY - ((v - min) / range) * (h - padY * 2);
+    return { x, y };
+  });
+  const pathPts = pts.filter(Boolean);
+  const path = pathPts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+  const dots = pathPts.map((p) => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5" fill="${color}" />`).join('');
+  const labelEls = labels.map((l, i) => `<text x="${(10 + i * stepX).toFixed(1)}" y="${h + 8}" text-anchor="middle" class="chart-label">${l}</text>`).join('');
+  return `<svg viewBox="0 0 ${w} ${h + 12}" class="line-chart" preserveAspectRatio="xMinYMid meet"><path d="${path}" fill="none" stroke="${color}" stroke-width="2.5" />${dots}${labelEls}</svg>`;
+}
+
+function exercisePoints(name) {
+  const logs = store.allSetLogs();
+  const points = [];
+  for (const key of Object.keys(logs)) {
+    const parts = key.split('_');
+    const week = Number(parts[0]);
+    const day = parts[1];
+    const exName = parts.slice(2).join('_');
+    if (exName !== name) continue;
+    const entry = logs[key];
+    const doneSets = (entry.sets || []).filter((s) => s.done);
+    let bestKg = 0;
+    let bestReps = 0;
+    doneSets.forEach((s) => {
+      const kg = Number(s.kg || s.kgR || 0);
+      const reps = Number(s.reps || s.repsR || 0);
+      if (kg > bestKg) { bestKg = kg; bestReps = reps; }
+    });
+    if (bestKg > 0) points.push({ date: dateForWeekDay(week, day), kg: bestKg, reps: bestReps });
+  }
+  return points.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function renderProgreso() {
+  const measurements = store.allMeasurements();
+  const weightDates = Object.keys(measurements).filter((d) => measurements[d].weightKg != null).sort();
+  const weightValues = weightDates.map((d) => measurements[d].weightKg);
+  const weightLabels = weightDates.map((d) => formatShort(d));
+  const firstW = weightValues[0];
+  const lastW = weightValues[weightValues.length - 1];
+  const deltaW = firstW != null && lastW != null && weightValues.length > 1 ? lastW - firstW : null;
+
+  const exerciseNames = [...new Set(EXERCISES.map((e) => e.name))].sort();
+  if (!progresoState.exercise || !exerciseNames.includes(progresoState.exercise)) progresoState.exercise = exerciseNames[0];
+  const points = exercisePoints(progresoState.exercise);
+  const kgValues = points.map((p) => p.kg);
+  const kgLabels = points.map((p) => formatShort(p.date));
+
+  app.innerHTML = `
+    <div class="header">
+      <div class="session">Progreso</div>
+      <div class="date">Peso corporal y peso cargado, comparables día a día</div>
+    </div>
+
+    <div class="section-title">Peso corporal</div>
+    <div class="card">
+      ${lineChartSvg(weightValues, weightLabels, 'var(--accent2)')}
+      ${deltaW !== null ? `<div class="exmeta" style="margin-top:6px">${deltaW <= 0 ? '↓' : '↑'} ${Math.abs(deltaW).toFixed(1)} kg desde el ${formatShort(weightDates[0])} (${firstW} kg → ${lastW} kg)</div>` : ''}
+    </div>
+
+    <div class="section-title">Peso cargado por ejercicio</div>
+    <div class="card">
+      <select id="exerciseSelect">
+        ${exerciseNames.map((n) => `<option value="${escapeAttr(n)}" ${n === progresoState.exercise ? 'selected' : ''}>${n}</option>`).join('')}
+      </select>
+      <div style="margin-top:10px">${lineChartSvg(kgValues, kgLabels, 'var(--accent)')}</div>
+      ${points.length ? `
+        <table class="progress-table">
+          <thead><tr><th>Fecha</th><th>Kg</th><th>Reps</th></tr></thead>
+          <tbody>
+            ${points.slice().reverse().map((p) => `<tr><td>${formatShort(p.date)}</td><td>${p.kg}</td><td>${p.reps}</td></tr>`).join('')}
+          </tbody>
+        </table>
+      ` : '<div class="exmeta">Sin series registradas para este ejercicio todavía.</div>'}
+    </div>
+
+    <div class="section-title">Comparar dos días</div>
+    <div class="card">
+      ${weightDates.length >= 2 ? `
+        <div class="grid2">
+          <div>
+            <label class="field-label">Día A</label>
+            <select id="dayA">${weightDates.map((d) => `<option value="${d}">${formatShort(d)}</option>`).join('')}</select>
+          </div>
+          <div>
+            <label class="field-label">Día B</label>
+            <select id="dayB">${weightDates.map((d, i) => `<option value="${d}" ${i === weightDates.length - 1 ? 'selected' : ''}>${formatShort(d)}</option>`).join('')}</select>
+          </div>
+        </div>
+        <div id="compareResult" class="exmeta" style="margin-top:10px"></div>
+      ` : '<div class="exmeta">Registra medidas en al menos 2 días distintos para poder comparar.</div>'}
+    </div>
+  `;
+
+  document.getElementById('exerciseSelect')?.addEventListener('change', (e) => {
+    progresoState.exercise = e.target.value;
+    render();
+  });
+
+  function updateCompare() {
+    const a = document.getElementById('dayA').value;
+    const b = document.getElementById('dayB').value;
+    const ma = measurements[a] || {};
+    const mb = measurements[b] || {};
+    const diff = ma.weightKg != null && mb.weightKg != null ? mb.weightKg - ma.weightKg : null;
+    document.getElementById('compareResult').innerHTML = `
+      ${formatShort(a)}: ${ma.weightKg ?? '—'} kg${ma.waistCm ? ` · cintura ${ma.waistCm} cm` : ''}<br/>
+      ${formatShort(b)}: ${mb.weightKg ?? '—'} kg${mb.waistCm ? ` · cintura ${mb.waistCm} cm` : ''}
+      ${diff !== null ? `<br/><b>${diff <= 0 ? '↓' : '↑'} ${Math.abs(diff).toFixed(1)} kg de diferencia</b>` : ''}
+    `;
+  }
+  if (weightDates.length >= 2) {
+    document.getElementById('dayA').addEventListener('change', updateCompare);
+    document.getElementById('dayB').addEventListener('change', updateCompare);
+    updateCompare();
+  }
+}
+
 // ---------------- PLAN (referencia de solo lectura) ----------------
 
 function renderPlan() {
@@ -798,6 +994,7 @@ function render() {
   if (route.screen === 'hoy') renderHoy();
   else if (route.screen === 'ejercicio') renderEjercicio(route.session, route.name);
   else if (route.screen === 'medidas') renderMedidas();
+  else if (route.screen === 'progreso') renderProgreso();
   else if (route.screen === 'plan') renderPlan();
 }
 
